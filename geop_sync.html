@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title></title>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/3.16/esri/css/esri.css">
+	<script src="https://js.arcgis.com/3.16/"></script>
+
+	<style>
+	html, body, #mapDiv {
+		padding: 0;
+		margin: 0;
+		height: 100%;}
+	</style>
+	
+	<script>
+		
+		var urlfeat = "http://sampleserver6.arcgisonline.com/arcgis/rest/services/USA/MapServer/0";
+		var urlGP = "http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Elevation/ESRI_Elevation_World/GPServer/Viewshed"
+
+		require(["esri/map",
+			 "esri/Color",
+			"esri/graphic",
+            "esri/graphicsUtils",
+            "esri/tasks/Geoprocessor",
+            "esri/tasks/FeatureSet",
+            "esri/tasks/LinearUnit",
+            "esri/symbols/SimpleMarkerSymbol",
+            "esri/symbols/SimpleLineSymbol",
+            "esri/symbols/SimpleFillSymbol",
+			"dojo/domReady!"], 
+		function(Map, 
+			Color, Graphic, graphicsUtils, Geoprocessor, FeatureSet, LinearUnit, SimpleMarkerSymbol, SimpleLineSymbol, SimpleFillSymbol) {
+	    // code to create the map and  add a basemap will go here
+		    map = new Map("mapDiv", {
+		    	center: [-56.049, 38.485],
+		    	zoom: 3,
+		    	basemap: "streets-relief-vector",
+		    	isPanArrows: true
+		  	});
+		    
+		    //creamos el objeto geoprocessor
+		    gp = new Geoprocessor("https://sampleserver6.arcgisonline.com/ArcGIS/rest/services/Elevation/ESRI_Elevation_World/GPServer/Viewshed");
+            gp.setOutputSpatialReference({
+              wkid: 102100
+            });
+            map.on("click", computeViewShed);
+
+            //funcion que prepara los parámetros de entrada y lanza el geoprocesamiento
+            function computeViewShed(evt) {
+	            map.graphics.clear();
+	            var pointSymbol = new SimpleMarkerSymbol();
+	            pointSymbol.setSize(14);
+	            pointSymbol.setOutline(new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, new Color([255, 0, 0]), 1));
+	            pointSymbol.setColor(new Color([0, 255, 0, 0.25]));
+
+	            //se crea el gráfico a partir del punto sobre el que ha pulsado el usuario en el mapa y se añade a la capa gráfica
+	            var graphic = new Graphic(evt.mapPoint, pointSymbol);
+	            map.graphics.add(graphic);
+
+	            //array para almacenar las entidades que formaran parte de los input parameter
+	            var features = [];
+	            //se añade el gráfico al array
+	            features.push(graphic);
+
+	            //se crea el objeto de tipo FeatureSet, ya que el primer parámetro del geoprocesamiento tiene que ser de este tipo
+	            var featureSet = new FeatureSet();
+	            //se añade el array de gráficos a la propiedad features del FeatureSet
+	            featureSet.features = features;
+	            
+	            //se crea un objeto de tipo LinearUnit, ya que el segundo parámetro del geoprocesamiento tiene que ser de este tipo
+	            var vsDistance = new LinearUnit();
+	            //se añade el valor a la propiedad distance del LinearUnit
+	            vsDistance.distance = 10;
+	             //se añade el valor a la propiedad units del LinearUnit
+	            vsDistance.units = "esriMiles";
+	            
+	            //se crea un objeto con tantas propiedades como parámetros de entrada
+	            	//el nombre de las propiedades de este objeto tiene que ser el mismo que el que tiene el GP
+	            	//en cada una de estas propiedades se añade el valor correspondiente, previamente creado
+	            var input_parameters = {
+	              "Input_Observation_Point": featureSet,
+	              "Viewshed_Distance": vsDistance
+	            };
+
+	            //se ejecuta el geoprocesamiento, pasándole los parámetros y la función de callback
+	            	//en este caso se usa el método execute, ya que el gp es síncrono
+	            gp.execute(input_parameters, drawViewshed);
+        	}
+
+        	//función de callback del geoprocesamiento, recibe dos parámetros del mensaje de respuesta del gp
+        	function drawViewshed(results, messages) {
+	            //se crea la simbología para el resultado
+	            var polySymbol = new SimpleFillSymbol();
+	            polySymbol.setOutline(new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, new Color([0, 0, 0, 0.5]), 1));
+	            polySymbol.setColor(new Color([255, 127, 0, 0.7]));
+	            
+	            //se obtiene el featureSet del primer elemento del array de resultados (primer parámetro de salida del gp)
+	            	//la propiedad value de este objeto del primer elemento es de tipo FeatureSet (ver el api rest del servicio de gp)
+	            var featureSet = results[0].value
+	            	//se obtiene el array de entidades del FeatureSet
+				var features =featureSet.features;
+					//se recorre este array, se le añade una simbología y se añade a la capa de gráficos
+				for (var f = 0, fl = features.length; f < fl; f++) {
+					var feature = features[f];
+			    
+			    	feature.setSymbol(polySymbol);
+			    	map.graphics.add(feature);
+				}
+					//se actualiza el extent del mapa al extent total de la capa de gráficos
+						//para obtener el extent de una capa de gráficos, se usa el método graphicsExtent de graphicsUtils
+	            map.setExtent(graphicsUtils.graphicsExtent(map.graphics.graphics), true);
+        	}
+	  });
+	</script>
+	</head>
+	<body class="claro">
+  		<div id="mapDiv"></div>
+  	</body>
+</html>
